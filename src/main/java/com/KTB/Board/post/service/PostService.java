@@ -17,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -29,7 +30,7 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public PageResponse<PostListResponse> getPosts(int page) {
-        Page<Post> postPage = postRepository.findAll(
+        Page<Post> postPage = postRepository.findByDeletedAtIsNull(
                 PageRequest.of(page - 1, 10, Sort.by("createdAt").descending()));
         List<PostListResponse> content = postPage.getContent().stream()
                 .map(PostListResponse::new)
@@ -40,7 +41,7 @@ public class PostService {
     @Transactional
     public PostDetailResponse getPost(Long postId) {
         Post post = findPost(postId);
-        post.setViewCount(post.getViewCount() + 1);
+        postRepository.incrementViewCount(postId);
         return new PostDetailResponse(post);
     }
 
@@ -68,7 +69,8 @@ public class PostService {
     public void deletePost(Long postId, Long userId) {
         Post post = findPost(postId);
         checkOwner(post.getUser().getId(), userId);
-        postRepository.delete(post);
+        // soft delete: cascade DELETE를 피해 comments/likes 대량 삭제로 인한 락 방지
+        post.setDeletedAt(LocalDateTime.now());
     }
 
     @Transactional
@@ -78,17 +80,17 @@ public class PostService {
         postLikeRepository.findByPostAndUser(post, user).ifPresentOrElse(
                 like -> {
                     postLikeRepository.delete(like);
-                    post.setLikeCount(post.getLikeCount() - 1);
+                    postRepository.decrementLikeCount(postId);
                 },
                 () -> {
                     postLikeRepository.save(PostLike.builder().post(post).user(user).build());
-                    post.setLikeCount(post.getLikeCount() + 1);
+                    postRepository.incrementLikeCount(postId);
                 }
         );
     }
 
     private Post findPost(Long postId) {
-        return postRepository.findById(postId)
+        return postRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BOARD_NOT_FOUND));
     }
 

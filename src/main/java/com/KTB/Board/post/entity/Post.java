@@ -12,7 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "posts")
+@Table(
+        name = "posts",
+        indexes = @Index(name = "idx_posts_user_id", columnList = "user_id")
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,13 +25,14 @@ public class Post {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(columnDefinition = "BIGINT UNSIGNED")
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 26)
     private String title;
 
     @Column(nullable = false, columnDefinition = "TEXT")
@@ -37,12 +41,15 @@ public class Post {
     private String image;
 
     @Builder.Default
+    @Column(columnDefinition = "INT UNSIGNED DEFAULT 0")
     private int viewCount = 0;
 
     @Builder.Default
+    @Column(columnDefinition = "INT UNSIGNED DEFAULT 0")
     private int likeCount = 0;
 
     @Builder.Default
+    @Column(columnDefinition = "INT UNSIGNED DEFAULT 0")
     private int commentCount = 0;
 
     @CreationTimestamp
@@ -51,6 +58,8 @@ public class Post {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    private LocalDateTime deletedAt;
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

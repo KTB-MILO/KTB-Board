@@ -31,7 +31,7 @@ public class CommentService {
                 .user(user)
                 .comment(request.getComment())
                 .build());
-        post.setCommentCount(post.getCommentCount() + 1);
+        postRepository.incrementCommentCount(postId);
     }
 
     @Transactional
@@ -45,12 +45,12 @@ public class CommentService {
     public void deleteComment(Long commentId, Long userId) {
         Comment comment = findComment(commentId);
         checkOwner(comment.getUser().getId(), userId);
-        comment.getPost().setCommentCount(comment.getPost().getCommentCount() - 1);
+        postRepository.decrementCommentCount(comment.getPost().getId());
         commentRepository.delete(comment);
     }
 
     private Post findPost(Long postId) {
-        return postRepository.findById(postId)
+        return postRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BOARD_NOT_FOUND));
     }
 
