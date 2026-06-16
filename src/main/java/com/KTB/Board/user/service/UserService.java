@@ -1,14 +1,14 @@
 package com.KTB.Board.user.service;
 
-import com.KTB.Board.comment.repository.CommentRepository;
 import com.KTB.Board.common.exception.CustomException;
 import com.KTB.Board.common.exception.ErrorCode;
 import com.KTB.Board.common.util.PasswordUtil;
-import com.KTB.Board.post.repository.PostLikeRepository;
-import com.KTB.Board.post.repository.PostRepository;
 import com.KTB.Board.session.repository.UserSessionRepository;
-import com.KTB.Board.user.dto.*;
 import com.KTB.Board.user.entity.User;
+import com.KTB.Board.user.presentation.dto.request.SignupRequest;
+import com.KTB.Board.user.presentation.dto.request.UpdatePasswordRequest;
+import com.KTB.Board.user.presentation.dto.request.UpdateUserRequest;
+import com.KTB.Board.user.presentation.dto.response.UserResponse;
 import com.KTB.Board.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,26 +20,23 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserSessionRepository sessionRepository;
-    private final PostRepository postRepository;
-    private final PostLikeRepository postLikeRepository;
-    private final CommentRepository commentRepository;
 
     @Transactional
     public void signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(request.email())) {
             throw new CustomException(ErrorCode.VALIDATION_ERROR);
         }
         userRepository.save(User.builder()
-                .email(request.getEmail())
-                .password(PasswordUtil.hash(request.getPassword()))
-                .nickname(request.getNickname())
-                .profileImageUrl(request.getProfileImageUrl())
+                .email(request.email())
+                .password(PasswordUtil.hash(request.password()))
+                .nickname(request.nickname())
+                .profileImageUrl(request.profileImageUrl())
                 .build());
     }
 
     @Transactional(readOnly = true)
     public UserResponse getUser(Long userId) {
-        return new UserResponse(findUser(userId));
+        return UserResponse.from(findUser(userId));
     }
 
     @Transactional
@@ -48,16 +45,16 @@ public class UserService {
             throw new CustomException(ErrorCode.UNAUTHORIZED_USER);
         }
         User user = findUser(userId);
-        user.setNickname(request.getUserName());
-        if (request.getProfileImage() != null) {
-            user.setProfileImageUrl(request.getProfileImage());
+        user.setNickname(request.nickname());
+        if (request.profileImage() != null) {
+            user.setProfileImageUrl(request.profileImage());
         }
     }
 
     @Transactional
     public void updatePassword(Long userId, UpdatePasswordRequest request) {
         User user = findUser(userId);
-        user.setPassword(PasswordUtil.hash(request.getPassword()));
+        user.setPassword(PasswordUtil.hash(request.password()));
     }
 
     @Transactional

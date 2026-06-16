@@ -2,7 +2,10 @@ package com.KTB.Board.user.controller;
 
 import com.KTB.Board.common.annotation.RequireAuth;
 import com.KTB.Board.common.response.ApiResponse;
-import com.KTB.Board.user.dto.*;
+import com.KTB.Board.user.presentation.dto.request.SignupRequest;
+import com.KTB.Board.user.presentation.dto.request.UpdatePasswordRequest;
+import com.KTB.Board.user.presentation.dto.request.UpdateUserRequest;
+import com.KTB.Board.user.presentation.dto.response.UserResponse;
 import com.KTB.Board.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
