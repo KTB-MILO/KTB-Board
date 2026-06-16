@@ -65,19 +65,13 @@ public class UserService {
         if (!userId.equals(authenticatedUserId)) {
             throw new CustomException(ErrorCode.UNAUTHORIZED_USER);
         }
-        findUser(userId);
-        // FK 순서에 맞춰 일괄 삭제
+        User user = findUser(userId);
         sessionRepository.deleteByUserId(userId);
-        postLikeRepository.deleteByPostUserId(userId);
-        commentRepository.deleteByPostUserId(userId);
-        postLikeRepository.deleteByUserId(userId);
-        commentRepository.deleteByUserId(userId);
-        postRepository.deleteByUserId(userId);
-        userRepository.deleteById(userId);
+        user.softDelete();
     }
 
     private User findUser(Long userId) {
-        return userRepository.findById(userId)
+        return userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BOARD_NOT_FOUND));
     }
 }
