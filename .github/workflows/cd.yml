@@ -1,0 +1,131 @@
+name: CD - Deploy to EC2 with SSM Blue Green
+
+on:
+  workflow_run:
+    workflows: ["CI - Build and Test"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: your-ecr-repository-name
+  APP_NAME: spring-app
+  EC2_INSTANCE_ID: i-xxxxxxxxxxxxxxxxx
+  APP_DIR: /home/ubuntu/app
+
+jobs:
+  deploy:
+    name: Deploy to EC2 by SSM
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "25"
+          cache: gradle
+
+      - name: Grant execute permission for Gradle
+        run: chmod +x ./gradlew
+
+      - name: Build JAR
+        run: ./gradlew clean bootJar
+
+      - name: Copy JAR
+        run: |
+          ls -al build/libs
+
+          JAR_COUNT=$(find build/libs -maxdepth 1 -type f -name "*.jar" ! -name "*plain*" | wc -l | tr -d ' ')
+          test "$JAR_COUNT" -eq 1
+      
+          JAR=$(find build/libs -maxdepth 1 -type f -name "*.jar" ! -name "*plain*" | head -n 1)
+          test -f "$JAR"
+      
+          cp "$JAR" app.jar
+          echo "Copied JAR: $JAR -> app.jar"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Deploy by SSM Run Command
+        id: ssm-deploy
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+          ECR_REGISTRY: ${{ steps.build-image.outputs.ecr_registry }}
+        run: |
+          cat > ssm-parameters.json <<EOF
+           {
+             "commands": [
+               "set -e",
+               "cd ${APP_DIR}",
+               "sudo bash deploy-blue-green.sh '${IMAGE_URI}' '${ECR_REGISTRY}' '${AWS_REGION}'"
+             ]
+           }
+           EOF
+          
+           COMMAND_ID=$(aws ssm send-command \
+             --region "$AWS_REGION" \
+             --instance-ids "$EC2_INSTANCE_ID" \
+             --document-name "AWS-RunShellScript" \
+             --comment "Deploy $APP_NAME by GitHub Actions - ${{ github.event.workflow_run.head_sha }}" \
+             --parameters file://ssm-parameters.json \
+             --query "Command.CommandId" \
+             --output text)
+          
+           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for SSM command result
+        run: |
+          aws ssm wait command-executed \
+            --region "$AWS_REGION" \
+            --command-id "${{ steps.ssm-deploy.outputs.command_id }}" \
+            --instance-id "$EC2_INSTANCE_ID"
+
+      - name: Print SSM command output
+        if: always()
+        run: |
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "${{ steps.ssm-deploy.outputs.command_id }}" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query "{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}" \
+            --output json
