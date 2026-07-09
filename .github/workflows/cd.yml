@@ -15,11 +15,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: ap-northeast-2
-  ECR_REPOSITORY: your-ecr-repository-name
-  APP_NAME: spring-app
-  EC2_INSTANCE_ID: i-xxxxxxxxxxxxxxxxx
-  APP_DIR: /home/ubuntu/app
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  APP_NAME: ${{ vars.APP_NAME }}
+  DEPLOY_ENV: ${{ vars.DEPLOY_ENV }}
+  APP_DIR: ${{ vars.APP_DIR }}
 
 jobs:
   deploy:
