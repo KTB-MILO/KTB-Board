@@ -1,0 +1,11 @@
+.git
+.github
+.gradle
+.idea
+build
+gradle
+src
+*.iml
+*.iws
+*.ipr
+HELP.md
