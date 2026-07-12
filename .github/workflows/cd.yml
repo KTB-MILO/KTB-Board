@@ -1,11 +1,9 @@
 name: CD - Deploy to EC2 with SSM Blue Green
 
 on:
-  workflow_run:
-    workflows: ["CI - Build and Test"]
-    types:
-      - completed
-
+  push:
+    branches-ignore:
+      - main
 
 permissions:
   contents: read
@@ -21,26 +19,21 @@ env:
   APP_NAME: ${{ vars.APP_NAME }}
   DEPLOY_ENV: ${{ vars.DEPLOY_ENV }}
   APP_DIR: ${{ vars.APP_DIR }}
+  EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
 
 jobs:
   deploy:
     name: Deploy to EC2 by SSM
     runs-on: ubuntu-latest
 
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "25"
           cache: gradle
 
@@ -54,12 +47,25 @@ jobs:
         run: |
           ls -al build/libs
 
-          JAR_COUNT=$(find build/libs -maxdepth 1 -type f -name "*.jar" ! -name "*plain*" | wc -l | tr -d ' ')
+          JAR_COUNT=$(find build/libs \
+            -maxdepth 1 \
+            -type f \
+            -name "*.jar" \
+            ! -name "*plain*" |
+            wc -l |
+            tr -d ' ')
+
           test "$JAR_COUNT" -eq 1
-      
-          JAR=$(find build/libs -maxdepth 1 -type f -name "*.jar" ! -name "*plain*" | head -n 1)
+
+          JAR=$(find build/libs \
+            -maxdepth 1 \
+            -type f \
+            -name "*.jar" \
+            ! -name "*plain*" |
+            head -n 1)
+
           test -f "$JAR"
-      
+
           cp "$JAR" app.jar
           echo "Copied JAR: $JAR -> app.jar"
 
@@ -77,15 +83,15 @@ jobs:
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
 
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
 
-          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
-          echo "ecr_registry=$ECR_REGISTRY" >> $GITHUB_OUTPUT
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "ecr_registry=$ECR_REGISTRY" >> "$GITHUB_OUTPUT"
 
       - name: Deploy by SSM Run Command
         id: ssm-deploy
@@ -94,25 +100,25 @@ jobs:
           ECR_REGISTRY: ${{ steps.build-image.outputs.ecr_registry }}
         run: |
           cat > ssm-parameters.json <<EOF
-           {
-             "commands": [
-               "set -e",
-               "cd ${APP_DIR}",
-               "sudo bash deploy-blue-green.sh '${IMAGE_URI}' '${ECR_REGISTRY}' '${AWS_REGION}'"
-             ]
-           }
-           EOF
-          
-           COMMAND_ID=$(aws ssm send-command \
-             --region "$AWS_REGION" \
-             --instance-ids "$EC2_INSTANCE_ID" \
-             --document-name "AWS-RunShellScript" \
-             --comment "Deploy $APP_NAME by GitHub Actions - ${{ github.event.workflow_run.head_sha }}" \
-             --parameters file://ssm-parameters.json \
-             --query "Command.CommandId" \
-             --output text)
-          
-           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          {
+            "commands": [
+              "set -e",
+              "cd ${APP_DIR}",
+              "sudo bash deploy-blue-green.sh '${IMAGE_URI}' '${ECR_REGISTRY}' '${AWS_REGION}'"
+            ]
+          }
+          EOF
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy $APP_NAME by GitHub Actions - ${{ github.sha }}" \
+            --parameters file://ssm-parameters.json \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
       - name: Wait for SSM command result
         run: |
@@ -122,7 +128,7 @@ jobs:
             --instance-id "$EC2_INSTANCE_ID"
 
       - name: Print SSM command output
-        if: always()
+        if: always() && steps.ssm-deploy.outputs.command_id != ''
         run: |
           aws ssm get-command-invocation \
             --region "$AWS_REGION" \
