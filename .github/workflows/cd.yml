@@ -1,13 +1,12 @@
 name: CD - Deploy to EC2 with SSM Blue Green
 
 on:
-#  workflow_run:
-#    workflows: ["CI - Build and Test"]
-#    types:
-#      - completed
-  push:
-    branches-ignore:
-      - main
+  workflow_run:
+    workflows: ["CI - Build and Test"]
+    types:
+      - completed
+
+
 permissions:
   contents: read
   id-token: write
