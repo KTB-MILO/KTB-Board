@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: ${SPRING_APPLICATION_NAME:Board}
+
+  datasource:
+    url: jdbc:mysql://${DATABASE_HOST:mysql-service}:${DATABASE_PORT:3306}/${DATABASE_NAME:board}?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    driver-class-name: ${DATABASE_DRIVER:com.mysql.cj.jdbc.Driver}
+    username: ${DATABASE_USERNAME:board}
+    password: ${DATABASE_PASSWORD:board1234}
+
+  jpa:
+    database-platform: ${DATABASE_PLATFORM:org.hibernate.dialect.MySQLDialect}
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        format_sql: ${JPA_FORMAT_SQL:true}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+  endpoints:
+    web:
+      exposure:
+        include: health,info

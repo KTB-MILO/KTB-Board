@@ -2,7 +2,7 @@
 .github
 .gradle
 .idea
-build
+#build
 gradle
 src
 *.iml
