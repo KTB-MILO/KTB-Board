@@ -39,7 +39,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         UserSession session = sessionRepository.findById(sessionId).orElse(null);
-        if (session == null || session.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (session == null || session.getExpiresAt().isBefore(LocalDateTime.now())
+                || session.getUser().isDeleted()) {
             sendUnauthorized(response);
             return false;
         }

@@ -23,7 +23,7 @@ public class AuthService {
 
     @Transactional
     public String login(String email, String password) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new CustomException(ErrorCode.INVALID_CREDENTIALS));
 
         if (!PasswordUtil.matches(password, user.getPassword())) {
